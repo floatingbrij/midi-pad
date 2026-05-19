@@ -32,7 +32,30 @@
     -webkit-font-smoothing:antialiased;
   }
 
-  .shell{ height:100dvh; display:grid; grid-template-rows: auto 1fr auto auto; }
+  .shell{ height:100dvh; display:grid; grid-template-rows: auto 1fr auto auto auto; }
+
+  /* ───────── live oscilloscope strip ───────── */
+  .scope-wrap{
+    position:relative;
+    background: oklch(0.10 0.012 280);
+    border-top:1px solid var(--rule-soft);
+    height: clamp(56px, 9vh, 88px);
+    overflow:hidden;
+  }
+  #scope{ display:block; width:100%; height:100%; }
+  .scope-wrap::before{
+    content:"OUT · live"; position:absolute;
+    top: 8px; left: clamp(20px, 3vw, 36px);
+    font-family:var(--mono);
+    font-size:9px; letter-spacing:.24em; text-transform:uppercase;
+    color:var(--ink-3); pointer-events:none;
+    z-index:2;
+  }
+  .scope-wrap::after{
+    content:""; position:absolute; inset:0;
+    background: linear-gradient(90deg, oklch(0.10 0.012 280) 0%, transparent 5%, transparent 95%, oklch(0.10 0.012 280) 100%);
+    pointer-events:none; z-index:1;
+  }
 
   /* ───────── header ───────── */
   header{
@@ -99,9 +122,35 @@
 
   .pad{
     position:relative; overflow:hidden;
-    background: oklch(0.16 0.012 280);
+    background: oklch(0.13 0.012 280);
     transition: background .12s cubic-bezier(.22,1,.36,1);
     cursor:none;
+  }
+
+  /* ambient idle gradient — gives every pad physical presence */
+  .pad .ambient{
+    position:absolute; inset:0; z-index:0; pointer-events:none;
+    background:
+      radial-gradient(130% 80% at 50% 115%, oklch(from var(--c) 0.22 calc(c * 0.65) h / .28), transparent 60%),
+      linear-gradient(180deg, oklch(0.185 0.012 280) 0%, oklch(0.13 0.012 280) 100%);
+  }
+
+  /* pressure ring — radiates on each hit, scaled by velocity */
+  .pad .ring{
+    position:absolute; left:50%; top:55%;
+    width: 36px; height: 36px; margin:-18px 0 0 -18px;
+    border-radius:50%;
+    border: 1.5px solid var(--c);
+    opacity:0; pointer-events:none; z-index:1;
+    transform: scale(0.4);
+  }
+  .pad.hit .ring{
+    animation: ringOut 1.05s cubic-bezier(.16,1,.3,1) forwards;
+  }
+  @keyframes ringOut{
+    0%   { opacity: calc(var(--vel, 1) * .85); transform: scale(0.4); border-width: 2px; }
+    60%  { border-width: 1px; }
+    100% { opacity: 0; transform: scale(16); border-width: 0.5px; }
   }
 
   /* LED strip top + bottom — drum-pad hardware nod */
@@ -119,17 +168,20 @@
   .pad::after{  bottom:0 }
   .pad.hit::before, .pad.hit::after{ opacity:1; height:5px }
 
-  /* hit flash overlay */
+  /* hit flash — color wash across the pad face */
   .pad .flash{
     position:absolute; inset:0;
-    background: radial-gradient(80% 100% at 50% 50%, oklch(from var(--c) l c h / .35), transparent 70%);
+    background:
+      radial-gradient(130% 100% at 50% 55%, oklch(from var(--c) l c h / .60), transparent 65%),
+      linear-gradient(180deg, oklch(from var(--c) l c h / .14) 0%, transparent 100%);
     opacity:0; pointer-events:none; z-index:1;
+    mix-blend-mode: screen;
   }
   .pad.hit .flash{
-    animation: flash .45s cubic-bezier(.22,1,.36,1);
+    animation: flash .55s cubic-bezier(.22,1,.36,1);
   }
   @keyframes flash{
-    0%   { opacity: var(--vel, 1); }
+    0%   { opacity: calc(var(--vel, 1) * .95); }
     100% { opacity: 0; }
   }
 
@@ -174,16 +226,6 @@
   }
   .pad .readout b{font-weight:400; color: var(--ink-2)}
 
-  /* corner ticks */
-  .pad .tick{
-    position:absolute; width:8px; height:8px;
-    border-color: var(--rule); border-style:solid; border-width:0;
-    pointer-events:none; z-index:2;
-  }
-  .pad .tick.tl{ top:6px; left:6px; border-top-width:1px; border-left-width:1px }
-  .pad .tick.tr{ top:6px; right:6px; border-top-width:1px; border-right-width:1px }
-  .pad .tick.bl{ bottom:6px; left:6px; border-bottom-width:1px; border-left-width:1px }
-  .pad .tick.br{ bottom:6px; right:6px; border-bottom-width:1px; border-right-width:1px }
 
   .pad{
     opacity:0; transform: translateY(8px);
@@ -223,36 +265,79 @@
     border-color: oklch(0.68 0.22 25);
     color: oklch(0.13 0.012 280);
   }
-  .tbtn .dot{
-    width:7px; height:7px; border-radius:50%;
-    background: currentColor; opacity:.6;
+  .tbtn .glyph{ display:inline-block; }
+  .tbtn.play .glyph{
+    width:0; height:0;
+    border-left: 9px solid currentColor;
+    border-top: 5.5px solid transparent;
+    border-bottom: 5.5px solid transparent;
   }
-  .tbtn.rec .dot{ background: oklch(0.68 0.22 25); opacity:1; box-shadow: 0 0 10px oklch(0.68 0.22 25 / .8); }
-  .tbtn.rec.on .dot{ background: oklch(0.13 0.012 280); box-shadow:none; }
+  .tbtn.play.on .glyph{
+    width:9px; height:10px; border:none;
+    background:
+      linear-gradient(90deg, currentColor 0 3px, transparent 3px 6px, currentColor 6px 9px);
+  }
+  .tbtn.rec .glyph{
+    width:9px; height:9px; border-radius:50%;
+    background: oklch(0.68 0.22 25);
+    box-shadow: 0 0 10px oklch(0.68 0.22 25 / .8);
+  }
+  .tbtn.rec.on .glyph{
+    background: oklch(0.13 0.012 280);
+    box-shadow:none;
+  }
+
+  /* kit segmented control */
+  .kit-seg{
+    display:inline-flex;
+    border:1px solid var(--rule);
+    border-radius:2px;
+    overflow:hidden;
+  }
+  .kit-seg button{
+    appearance:none; background:transparent; color: var(--ink-3);
+    border:none; border-left:1px solid var(--rule);
+    padding: 8px 12px;
+    font-family:var(--mono); font-size:10px; letter-spacing:.22em; text-transform:uppercase;
+    cursor:pointer;
+    transition: background .15s, color .15s;
+  }
+  .kit-seg button:first-child{ border-left:none; }
+  .kit-seg button:hover{ color: var(--ink-2); }
+  .kit-seg button.on{
+    background: var(--ink);
+    color: oklch(0.13 0.012 280);
+  }
 
   .steps{
     display:grid;
     grid-template-columns: repeat(16, 1fr);
-    gap:4px;
-    align-items:center;
+    gap:3px;
+    align-items:end;
+    height: 40px;
+    cursor: pointer;
   }
   .step{
-    height: 12px;
-    background: var(--bg-2);
+    position:relative;
+    height: 100%;
+    background: oklch(0.14 0.012 280);
     border:1px solid var(--rule-soft);
     border-radius:2px;
-    transition: background .1s, border-color .1s, transform .1s;
+    transition: border-color .12s, box-shadow .15s;
+    overflow:hidden;
   }
   .step.beat{ border-color: var(--rule); }
-  .step.cursor{
-    background: oklch(0.38 0.014 280);
-    border-color: oklch(0.55 0.014 280);
-  }
-  .step.fired{
+  .step::after{
+    content:""; position:absolute; left:0; right:0; bottom:0;
+    height: calc(var(--vh, 0) * 1%);
     background: var(--c, var(--ink));
-    border-color: var(--c, var(--ink));
-    box-shadow: 0 0 10px var(--c, transparent);
-    transform: scaleY(1.35);
+    box-shadow: inset 0 1px 0 oklch(from var(--c, white) 0.95 c h / .6);
+    transition: height .14s cubic-bezier(.22,1,.36,1);
+  }
+  .step.fired{ border-color: var(--c, var(--ink)); }
+  .step.cursor{
+    border-color: var(--ink);
+    box-shadow: 0 0 0 1px var(--ink), 0 0 14px oklch(0.97 0.012 90 / .25);
   }
 
   .transport-right{
@@ -307,14 +392,12 @@
     display:grid; place-items:center;
     cursor:pointer;
   }
-  #boot::before{
-    content:""; position:absolute; inset:0;
-    background:
-      radial-gradient(50% 50% at 25% 30%, oklch(0.68 0.22 25 / .14), transparent 60%),
-      radial-gradient(45% 45% at 80% 75%, oklch(0.74 0.16 230 / .14), transparent 60%);
+  #bootscope{
+    position:absolute; inset:0; width:100%; height:100%;
+    z-index:0; opacity:.55;
     pointer-events:none;
   }
-  #boot .card{position:relative; text-align:center; padding: 0 24px; max-width: 760px}
+  #boot .card{position:relative; z-index:1; text-align:center; padding: 0 24px; max-width: 760px}
   #boot .kicker{
     font-size:10px; letter-spacing:.32em; text-transform:uppercase;
     color: var(--ink-3); margin-bottom:24px;
@@ -393,12 +476,18 @@
 
   <main id="grid"></main>
 
+  <div class="scope-wrap"><canvas id="scope"></canvas></div>
+
   <div class="transport">
     <div class="transport-left">
-      <button class="tbtn" id="btnPlay"><span class="dot"></span>PLAY</button>
-      <button class="tbtn rec" id="btnRec"><span class="dot"></span>REC</button>
-      <button class="tbtn" id="btnClear">CLEAR</button>
-      <button class="tbtn" id="btnKit">KIT · 808</button>
+      <button class="tbtn play" id="btnPlay"><span class="glyph"></span>PLAY</button>
+      <button class="tbtn rec"  id="btnRec"><span class="glyph"></span>REC</button>
+      <button class="tbtn"      id="btnClear">CLEAR</button>
+      <div class="kit-seg" id="kitSeg">
+        <button data-kit="0" class="on">808</button>
+        <button data-kit="1">ACOU</button>
+        <button data-kit="2">LO-FI</button>
+      </div>
     </div>
     <div class="steps" id="steps"></div>
     <div class="transport-right">
@@ -425,6 +514,7 @@
 </div>
 
 <div id="boot">
+  <canvas id="bootscope"></canvas>
   <div class="card">
     <div class="kicker">An 8-pad drum machine · built for Apple Silicon</div>
     <h1>tap <em>the pads.</em></h1>
@@ -474,9 +564,9 @@ PADS.forEach((p, i) => {
   el.style.setProperty('--c', p.color);
   el.style.animationDelay = (0.06 * i) + 's';
   el.innerHTML = `
+    <div class="ambient"></div>
+    <div class="ring"></div>
     <div class="flash"></div>
-    <span class="tick tl"></span><span class="tick tr"></span>
-    <span class="tick bl"></span><span class="tick br"></span>
     <div class="num">${String(i+1).padStart(2,'0')}</div>
     <div class="name">${p.name[0]} <em>${p.name[1]}</em></div>
     <div class="spec">${p.spec}</div>
@@ -492,7 +582,7 @@ PADS.forEach((p, i) => {
 /* ─────────────────────────────────────────────────────────────────
    AUDIO ENGINE
    ───────────────────────────────────────────────────────────────── */
-let AC, master, comp, reverb, hpf;
+let AC, master, comp, reverb, hpf, analyser;
 let totalHits = 0;
 const padHits = Object.fromEntries(PADS.map(p => [p.id, 0]));
 
@@ -507,9 +597,15 @@ function initAudio(){
   reverb.buffer = makeIR(1.6, 3.0);
   const wet = AC.createGain(); wet.gain.value = .08;
   const dry = AC.createGain(); dry.gain.value = .95;
-  master.connect(dry).connect(comp).connect(AC.destination);
+  analyser = AC.createAnalyser();
+  analyser.fftSize = 2048;
+  analyser.smoothingTimeConstant = 0.6;
+  master.connect(dry).connect(comp);
   master.connect(reverb).connect(wet).connect(comp);
+  comp.connect(analyser);
+  comp.connect(AC.destination);
   document.getElementById('calAudio').textContent = 'online · ' + (AC.sampleRate/1000).toFixed(1) + ' kHz';
+  startScope();
 }
 function makeIR(seconds, decay){
   const rate = AC.sampleRate, len = rate * seconds;
@@ -751,15 +847,18 @@ const stepEls = [...stepsEl.children];
 function paintSteps(){
   stepEls.forEach((el, i) => {
     el.classList.toggle('cursor', seq.playing && i === seq.cursor);
-    const filled = seq.pattern[i].length > 0;
+    const events = seq.pattern[i];
+    const filled = events.length > 0;
     el.classList.toggle('fired', filled);
     if (filled){
-      // color the step using the most recent pad's color
-      const last = seq.pattern[i][seq.pattern[i].length - 1];
+      const last = events[events.length - 1];
       const pad = PADS.find(p => p.id === last.padId);
       el.style.setProperty('--c', pad ? pad.color : 'var(--ink)');
+      const maxVel = events.reduce((m, e) => Math.max(m, e.vel || 0), 0);
+      el.style.setProperty('--vh', Math.round(Math.max(0.2, maxVel) * 100));
     } else {
       el.style.removeProperty('--c');
+      el.style.setProperty('--vh', 0);
     }
   });
 }
@@ -813,11 +912,13 @@ document.getElementById('btnPlay').addEventListener('click', () => seq.playing ?
 document.getElementById('btnRec').addEventListener('click', toggleRec);
 document.getElementById('btnClear').addEventListener('click', clearPattern);
 
-const btnKit = document.getElementById('btnKit');
-btnKit.addEventListener('click', () => {
-  kitIdx = (kitIdx + 1) % KITS.length;
-  btnKit.textContent = 'KIT · ' + KITS[kitIdx].toUpperCase();
-  document.getElementById('hudKit').textContent = KITS[kitIdx].toUpperCase();
+const kitSeg = document.getElementById('kitSeg');
+kitSeg.querySelectorAll('button').forEach(b => {
+  b.addEventListener('click', () => {
+    kitIdx = parseInt(b.dataset.kit, 10);
+    kitSeg.querySelectorAll('button').forEach(x => x.classList.toggle('on', x === b));
+    document.getElementById('hudKit').textContent = KITS[kitIdx].toUpperCase();
+  });
 });
 
 const bpmInput = document.getElementById('bpm');
@@ -858,10 +959,96 @@ window.addEventListener('keydown', e => {
 });
 
 /* ─────────────────────────────────────────────────────────────────
-   BOOT
+   LIVE OSCILLOSCOPE — master-bus waveform
+   ───────────────────────────────────────────────────────────────── */
+let scopeCanvas, scopeCtx, scopeData;
+function startScope(){
+  if (scopeCanvas) return;
+  scopeCanvas = document.getElementById('scope');
+  scopeCtx = scopeCanvas.getContext('2d');
+  scopeData = new Uint8Array(analyser.fftSize);
+  const resize = () => {
+    const dpr = window.devicePixelRatio || 1;
+    scopeCanvas.width  = scopeCanvas.clientWidth * dpr;
+    scopeCanvas.height = scopeCanvas.clientHeight * dpr;
+    scopeCtx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  };
+  resize();
+  window.addEventListener('resize', resize);
+  drawScope();
+}
+function drawScope(){
+  requestAnimationFrame(drawScope);
+  if (!analyser) return;
+  analyser.getByteTimeDomainData(scopeData);
+  const w = scopeCanvas.clientWidth, h = scopeCanvas.clientHeight;
+  scopeCtx.clearRect(0, 0, w, h);
+
+  // center axis
+  scopeCtx.strokeStyle = 'oklch(0.30 0.014 280 / 0.35)';
+  scopeCtx.lineWidth = 1;
+  scopeCtx.beginPath();
+  scopeCtx.moveTo(0, h/2); scopeCtx.lineTo(w, h/2);
+  scopeCtx.stroke();
+
+  // waveform — coloured by the most recently triggered pad
+  const pad = PADS.find(p => p.id === lastTriggered);
+  scopeCtx.strokeStyle = pad ? pad.color : 'oklch(0.78 0.012 90)';
+  scopeCtx.lineWidth = 1.25;
+  scopeCtx.lineJoin = 'round';
+  scopeCtx.beginPath();
+  const stride = scopeData.length / w;
+  for (let x = 0; x < w; x++){
+    const v = scopeData[Math.floor(x * stride)] / 128 - 1;
+    const y = h/2 + v * (h/2 - 4);
+    if (x === 0) scopeCtx.moveTo(x, y);
+    else         scopeCtx.lineTo(x, y);
+  }
+  scopeCtx.stroke();
+}
+
+/* ─────────────────────────────────────────────────────────────────
+   BOOT — animated sine field while we wait for the first tap
    ───────────────────────────────────────────────────────────────── */
 const supportsForce = 'onwebkitmouseforcechanged' in window;
 document.getElementById('calForce').textContent = supportsForce ? 'available · awaiting press' : 'unavailable (use Safari)';
+
+(function bootWaveform(){
+  const cv = document.getElementById('bootscope');
+  if (!cv) return;
+  const cx = cv.getContext('2d');
+  const resize = () => {
+    const dpr = window.devicePixelRatio || 1;
+    cv.width = innerWidth * dpr; cv.height = innerHeight * dpr;
+    cx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  };
+  resize(); window.addEventListener('resize', resize);
+  const start = performance.now();
+  const colors = [PADS[0].color, PADS[5].color, PADS[7].color]; // kick, tom, cymbal
+  function frame(){
+    if (!document.body.contains(cv)) return;
+    const t = (performance.now() - start) / 1000;
+    const w = innerWidth, h = innerHeight;
+    cx.clearRect(0, 0, w, h);
+    for (let layer = 0; layer < 3; layer++){
+      const phase = t * (0.45 + layer * 0.18);
+      const freq  = 0.0042 + layer * 0.0018;
+      const amp   = h * (0.22 - layer * 0.05);
+      cx.beginPath();
+      cx.strokeStyle = colors[layer];
+      cx.lineWidth = 1;
+      cx.globalAlpha = 0.6 - layer * 0.14;
+      for (let x = 0; x <= w; x += 2){
+        const y = h/2 + Math.sin(x * freq + phase + Math.sin(x * freq * 0.5 + phase * 0.7) * 0.8) * amp;
+        if (x === 0) cx.moveTo(x, y); else cx.lineTo(x, y);
+      }
+      cx.stroke();
+    }
+    cx.globalAlpha = 1;
+    requestAnimationFrame(frame);
+  }
+  frame();
+})();
 
 const boot = document.getElementById('boot');
 boot.addEventListener('click', () => {
